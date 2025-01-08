@@ -122,7 +122,7 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case message, ok := <-c.send:
+		case message, ok := <-c.Send:
 
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -165,9 +165,9 @@ func ServeWs(hub *Hub, gameId string, userId string, w http.ResponseWriter, r *h
 	client := &Client{
 		hub:      hub,
 		conn:     conn,
-		send:     make(chan []byte, 256),
+		Send:     make(chan []byte, 256),
 		gameId:   gameId,
-		playerId: userId,
+		PlayerId: userId,
 	}
 
 	// Register the client in the Hub
