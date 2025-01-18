@@ -23,6 +23,7 @@ type CreateGame struct {
 		MaxRounds       int `json:"maxRounds"`
 		TurnTimer       int `json:"turnTimer"`
 		SelectWordTimer int `json:"selectWordTimer"`
+		SelectWordCount int `json:"selectWordCount"`
 	} `json:"gameOptions"`
 }
 
@@ -43,10 +44,13 @@ func RegisterGameRoutes(router *gin.Engine, gm *g.GameManager) {
 				MaxRounds:       payload.GameOptions.MaxRounds,
 				TurnTimer:       payload.GameOptions.TurnTimer,
 				SelectWordTimer: payload.GameOptions.SelectWordTimer,
+				SelectWordCount: payload.GameOptions.SelectWordCount,
 			},
 		}
 
 		createdGame := gm.CreateGame(params)
+
+		log.Printf("Created game: %+v", createdGame.ToLoggable())
 
 		if createdGame == nil {
 			c.JSON(http.StatusConflict, gin.H{"error": "Game already exists"})
@@ -95,7 +99,7 @@ func RegisterGameRoutes(router *gin.Engine, gm *g.GameManager) {
 
 		if totalPlayers < 8 {
 
-			player := g.CreatePlayer(payload.PlayerId, payload.GameId, false)
+			player := g.CreatePlayer(payload.PlayerId, payload.Playername, false)
 
 			err := game.AddPlayer(player)
 
@@ -130,5 +134,6 @@ func RegisterGameRoutes(router *gin.Engine, gm *g.GameManager) {
 
 		// Pass the game’s Hub to ServeWs for the WebSocket handshake
 		ws.ServeWs(g.Hub, gameId, userId, c.Writer, c.Request)
+
 	})
 }

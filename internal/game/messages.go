@@ -52,12 +52,6 @@ type YourTurnPayload struct {
 	Info string `json:"info"`
 }
 
-// Helper function to marshal a message into JSON
-func MarshalMessage(message any) ([]byte, error) {
-	return json.Marshal(message)
-}
-
-// Logging utility for sending messages
 func logMessageSend(playerId string, messageType string) {
 	log.Printf("Message sent to player %s (Type: %s)", playerId, messageType)
 }
@@ -69,6 +63,7 @@ func (g *Game) SendMessageToPlayer(playerId string, message any) error {
 	for client := range g.Hub.Clients {
 		if client.PlayerId == playerId {
 			jsonData, err := json.Marshal(message)
+
 			if err != nil {
 				return fmt.Errorf("failed to marshal message: %w", err)
 			}
@@ -95,4 +90,43 @@ func (g *Game) BroadcastToAll(message any) error {
 	g.Hub.Broadcast <- jsonData
 	log.Printf("Broadcast message sent: %s", string(jsonData))
 	return nil
+}
+
+func (g *Game) HandleTimerStartMessages(payload map[string]interface{}) {
+	timerTypeVal, ok := payload["timerType"].(string)
+	if !ok {
+		log.Println("timerType is missing or not a string")
+		return
+	}
+
+	switch timerTypeVal {
+	case "guess_word_timer":
+		g.HandleGuessWordCountdown()
+	case "select_word_timer":
+		g.HandleSelectWordCountdown()
+	case "start_game_timer":
+		g.HandleStartGameCountdown()
+	default:
+		log.Printf("Unknown timerType: %s", timerTypeVal)
+	}
+}
+
+func (g *Game) HandleTimerStopMessages(payload map[string]interface{}) {
+	timerTypeVal, ok := payload["timerType"].(string)
+	if !ok {
+		log.Println("timerType is missing or not a string")
+		return
+	}
+
+	switch timerTypeVal {
+	case "guess_word_timer":
+		g.Round.StopGuessWordTimer()
+	case "select_word_timer":
+		g.Round.StopSelectWordTimer()
+	case "start_game_timer":
+		g.StopGameTimer()
+
+	default:
+		log.Printf("Unknown timerType: %s", timerTypeVal)
+	}
 }

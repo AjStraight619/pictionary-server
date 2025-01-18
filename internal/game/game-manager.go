@@ -1,7 +1,6 @@
 package game
 
 import (
-	"encoding/json"
 	"log"
 	"sync"
 
@@ -13,12 +12,6 @@ type CreateGameParams struct {
 	PlayerId string
 	Username string
 	Options  GameOptions
-}
-
-type GameOptions struct {
-	MaxRounds       int
-	TurnTimer       int
-	SelectWordTimer int
 }
 
 type GameManager struct {
@@ -44,49 +37,23 @@ func (gm *GameManager) CreateGame(params CreateGameParams) *Game {
 	game := &Game{
 		Id: params.GameId,
 		Players: []*Player{
-			{Id: params.PlayerId, Username: params.Username, IsLeader: true},
+			{Id: params.PlayerId, Username: params.Username, IsLeader: true, Color: "#FF5733"},
 		},
 		playerIds: map[string]struct{}{
-			params.PlayerId: {}, // Add the player's ID to the set
+			params.PlayerId: {}, // Empty set of playerId's
 		},
 		Options: params.Options,
 	}
 
 	// Initialize the Hub and associate it with the game
-	game.Hub = ws.NewHub(game) // Pass the game as the GameHandler
+	game.Hub = ws.NewHub(game)
 	go game.Hub.Run()
 
-	// Store the game
 	gm.Games[params.GameId] = game
 
 	leader := game.Players[0]
 
-	message := BroadcastMessage{
-		Type: "player-joined",
-		Payload: struct {
-			PlayerId  string `json:"playerId"`
-			Username  string `json:"username"`
-			IsLeader  bool   `json:"isLeader"`
-			IsDrawing bool   `json:"isDrawing"`
-			Score     int16  `json:"score"`
-		}{
-			PlayerId:  leader.Id,
-			Username:  leader.Username,
-			IsLeader:  leader.IsLeader,
-			IsDrawing: leader.IsDrawing,
-			Score:     leader.Score,
-		},
-	}
-
-	jsonData, err := json.Marshal(&message)
-
-	if err != nil {
-		log.Printf("Error marshaling message: %v", err)
-		return nil
-
-	}
-
-	game.Hub.Broadcast <- jsonData
+	log.Printf("Created game %s with leader: %v", game.Id, leader)
 
 	return game
 }

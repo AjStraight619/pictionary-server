@@ -3,6 +3,10 @@ package websocket
 type GameHandler interface {
 	HandlePlayerReconnect(playerId string)
 	HandlePlayerDisconnect(playerId string)
+	HandleWordSelect(playerId string, word string)
+	HandleTimerStartMessages(payload map[string]interface{})
+	HandleTimerStopMessages(payload map[string]interface{})
+	GetGameState() map[string]any
 }
 
 type Hub struct {
@@ -28,20 +32,18 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.Register:
 			h.Clients[client] = true
-			h.gameHandler.HandlePlayerReconnect(client.playerId)
 		case client := <-h.Unregister:
 			if _, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
-				close(client.send)
-				h.gameHandler.HandlePlayerDisconnect(client.playerId)
+				close(client.Send)
 			}
 
 		case message := <-h.Broadcast:
 			for client := range h.Clients {
 				select {
-				case client.send <- message:
+				case client.Send <- message:
 				default:
-					close(client.send)
+					close(client.Send)
 					delete(h.Clients, client)
 				}
 			}

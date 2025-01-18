@@ -9,6 +9,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type BroadcastMessage struct {
+	Type    string `json:"type"`
+	Payload any    `json:"payload"`
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  2048,
 	WriteBufferSize: 2048,
@@ -29,7 +34,8 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 5128
+
+	maxMessageSize = 20480
 )
 
 var (
@@ -38,8 +44,8 @@ var (
 )
 
 type Message struct {
-	Type    string `json:"type"`
-	Payload any    `json:"payload"`
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 type Client struct {
@@ -70,9 +76,10 @@ func (c *Client) readPump() {
 			}
 			break // Ensure the loop exits on error
 		}
+		log.Printf("Recieved message: %s", string(message))
 
 		if string(message) == "ping" {
-			log.Println("Received ping, responding with pong")
+			log.Println("Received ping, responding with pong") // TODO: Add custom heartbeat on frontend
 			if err := c.conn.WriteMessage(websocket.PongMessage, nil); err != nil {
 				log.Printf("Error sending pong: %v", err)
 			}
@@ -88,17 +95,30 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		if parsedMessage.Type == "path" {
-			log.Println("Recieved path data")
+		switch parsedMessage.Type {
+		case "start_timer":
+			payloadMap, ok := parsedMessage.Payload.(map[string]interface{})
+			if !ok {
+				log.Println("Invalid payload: expected an object")
+				break
+			}
+
+			c.hub.gameHandler.HandleTimerStartMessages(payloadMap) // Already broadcasting to all clients in fucntion
+			continue
+
+		case "stop_timer":
+			payloadMap, ok := parsedMessage.Payload.(map[string]interface{})
+			if !ok {
+				log.Println("Invalid payload: expected an object")
+				break
+			}
+
+			c.hub.gameHandler.HandleTimerStopMessages(payloadMap) // Already broadcasting to all clients in function
+			continue
+
+		default:
+			break // All other cases break and directly broadcast the message
 		}
-
-		// TODO: Handle incomming messages based on message type. Timers need to be set/canceled. Guesses need to be checked.
-
-		// Handle messages here
-
-		// switch parsedMessage.Type {
-		// 	case
-		// }
 
 		jsonData, err := json.Marshal(parsedMessage)
 
@@ -108,7 +128,6 @@ func (c *Client) readPump() {
 		}
 
 		c.hub.Broadcast <- jsonData
-		// log.Printf("Received message: Type=%s, Payload=%s", parsedMessage.Type, parsedMessage.Payload)
 
 	}
 }
@@ -176,4 +195,22 @@ func ServeWs(hub *Hub, gameId string, userId string, w http.ResponseWriter, r *h
 	// Kick off read/write pumps
 	go client.writePump()
 	go client.readPump()
+
+	// When client connects, send them the current game state
+
+	gameState := hub.gameHandler.GetGameState()
+
+	message := BroadcastMessage{
+		Type:    "game_state",
+		Payload: gameState,
+	}
+
+	jsonData, err := json.Marshal(message)
+
+	if err != nil {
+		log.Printf("Something went wrong marshalling game state: %v", err)
+		return
+	}
+
+	client.hub.Broadcast <- jsonData
 }

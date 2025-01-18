@@ -1,81 +1,127 @@
 package game
 
 import (
-	"context"
+	"encoding/json"
 	"log"
 	"time"
 )
 
 type Round struct {
-	Timer                 *time.Timer
 	Count                 int
 	CurrentDrawerIdx      int
 	WordToGuess           string
 	IsActive              bool
 	PlayersDrawnThisRound map[string]struct{}
-	timerCtx              context.Context
-	timerCancel           context.CancelFunc
 	Game                  *Game
+	selectWordTimer       *Timer
+	guessWordTimer        *Timer
 }
 
 func (r *Round) NextRound() {
 	r.Count++
 	r.PlayersDrawnThisRound = make(map[string]struct{})
+	log.Printf("Starting round %d", r.Count)
 }
 
-func (r *Round) NextDrawer(totalPlayers int) {
-	r.CurrentDrawerIdx = (r.CurrentDrawerIdx + 1) % totalPlayers
-}
-
-func (r *Round) StartTimer(duration time.Duration, onExpire func()) {
-	// Create a fresh context & cancel function
-	r.timerCtx, r.timerCancel = context.WithCancel(context.Background())
-
-	// Start the countdown with that context
-	countdownCh := Countdown(r.timerCtx, duration)
-
-	// Read countdown values in a goroutine
-	go func() {
-		for secondsLeft := range countdownCh {
-			// For each tick, you might want to broadcast/log the time left
-			log.Printf("Round %d countdown: %d seconds remaining", r.Count, secondsLeft)
-			// or Hub.Broadcast(...) etc.
-
-		}
-
-		onExpire()
-	}()
-}
-
-func Countdown(ctx context.Context, duration time.Duration) <-chan int {
-	ch := make(chan int)
-
-	go func() {
-		defer close(ch)
-
-		secondsRemaining := int(duration.Seconds())
-		for secondsRemaining > 0 {
-			select {
-			case <-ctx.Done():
-				// The countdown was canceled externally
-				return
-			default:
-				// Not canceled yet, send the countdown value
-				ch <- secondsRemaining
-				time.Sleep(1 * time.Second)
-				secondsRemaining--
-			}
-		}
-	}()
-
-	return ch
-}
-
-func (r *Round) StopTimer() {
-	// If we have a valid cancel func, call it
-	if r.timerCancel != nil {
-		log.Println("Stopping the round timer early!")
-		r.timerCancel() // triggers ctx.Done() in the Countdown
-		r.timerCancel = nil
+func (r *Round) NextDrawer(numPlayers int) {
+	if numPlayers == 0 {
+		return
 	}
+
+	for {
+		r.CurrentDrawerIdx = (r.CurrentDrawerIdx + 1) % numPlayers
+
+		nextPlayer := r.Game.Players[r.CurrentDrawerIdx]
+		if !nextPlayer.HasDrawn {
+			nextPlayer.IsDrawing = true
+			log.Printf("Next drawer is %s (ID: %s)", nextPlayer.Username, nextPlayer.Id)
+			return
+		}
+
+		if allPlayersHaveDrawn(r.Game.Players) {
+			r.NextRound()
+			return
+		}
+	}
+}
+
+func (r *Round) getCurrentDrawer() *Player {
+	return r.Game.Players[r.CurrentDrawerIdx]
+}
+
+func (r *Round) StartSelectWordTimer(duration time.Duration, onExpire func()) {
+	r.selectWordTimer = NewTimer(duration, onExpire)
+	go func() {
+		for secondsLeft := range r.selectWordTimer.GetCountdownChannel() {
+
+			message := TimerMessage{
+				Type: "select_word_timer",
+				Payload: TimerPayload{
+					TimeRemaining: secondsLeft,
+				},
+			}
+
+			jsonData, err := json.Marshal(message)
+			if err != nil {
+				log.Printf("Failed to marshal JSON: %v", err)
+				continue
+			}
+
+			r.Game.Hub.Broadcast <- jsonData
+
+			// Log the remaining time for debugging
+			log.Printf("Time left to select a word: %d seconds", secondsLeft)
+		}
+	}()
+	r.selectWordTimer.Start()
+}
+
+func (r *Round) StartGuessWordTimer(duration time.Duration, onExpire func()) {
+	r.guessWordTimer = NewTimer(duration, onExpire)
+	go func() {
+		for secondsLeft := range r.guessWordTimer.GetCountdownChannel() {
+
+			message := TimerMessage{
+				Type: "guess_word_timer",
+				Payload: TimerPayload{
+					TimeRemaining: secondsLeft,
+				},
+			}
+
+			jsonData, err := json.Marshal(message)
+
+			if err != nil {
+				log.Printf("Failed to marshal JSON: %v", err)
+				continue
+			}
+
+			r.Game.Hub.Broadcast <- jsonData
+
+			log.Printf("Time left to guess the word: %d seconds", secondsLeft)
+		}
+	}()
+	r.guessWordTimer.Start()
+}
+
+func (r *Round) StopSelectWordTimer() {
+	if r.selectWordTimer != nil {
+		r.selectWordTimer.Stop()
+		r.selectWordTimer = nil
+	}
+}
+
+func (r *Round) StopGuessWordTimer() {
+	if r.guessWordTimer != nil {
+		r.guessWordTimer.Stop()
+		r.guessWordTimer = nil
+	}
+}
+
+func allPlayersHaveDrawn(players []*Player) bool {
+	for _, player := range players {
+		if !player.HasDrawn {
+			return false
+		}
+	}
+	return true
 }

@@ -4,7 +4,9 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path/filepath"
 
+	"github.com/Ajstraight619/pictionary-server/internal/database"
 	"github.com/Ajstraight619/pictionary-server/internal/game"
 	"github.com/Ajstraight619/pictionary-server/internal/handlers"
 	"github.com/gin-contrib/cors"
@@ -22,6 +24,13 @@ func main() {
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
+
+	databasePath, err := filepath.Abs("../../data/game.db")
+	if err != nil {
+		log.Fatalf("Failed to resolve absolute path for database: %v", err)
+	}
+
+	database.InitDB(databasePath)
 
 	gm := game.NewGameManager()
 
