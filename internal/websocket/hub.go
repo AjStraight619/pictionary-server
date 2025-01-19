@@ -3,7 +3,7 @@ package websocket
 type GameHandler interface {
 	HandlePlayerReconnect(playerId string)
 	HandlePlayerDisconnect(playerId string)
-	HandleWordSelect(playerId string, word string)
+	HandleWordSelect(word string)
 	HandleTimerStartMessages(payload map[string]interface{})
 	HandleTimerStopMessages(payload map[string]interface{})
 	GetGameState() map[string]any

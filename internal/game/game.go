@@ -160,6 +160,7 @@ func (g *Game) GetGameState() map[string]any {
 		Options         GameOptions          `json:"options"`
 		Round           JSONRound            `json:"round"`
 		SelectableWords []JSONSelectableWord `json:"selectable_words"`
+		WordToGuess     string               `json:"word_to_guess"`
 	}
 
 	// Construct the JSON-ready game state
@@ -170,9 +171,9 @@ func (g *Game) GetGameState() map[string]any {
 		Options:         g.Options,
 		Round:           roundDetails,
 		SelectableWords: selectableWords,
+		WordToGuess:     g.Round.WordToGuess,
 	}
 
-	// Marshal the struct to JSON (if needed elsewhere) or return the struct
 	return map[string]any{
 		"gameState": gameState,
 	}
@@ -209,10 +210,7 @@ func (g *Game) GetPlayerById(id string) *Player {
 	return nil
 }
 
-func (g *Game) StartGame(onRoundComplete func()) error {
-	if len(g.Players) < 2 {
-		return fmt.Errorf("not enough players to start the game")
-	}
+func (g *Game) StartGame() error {
 
 	g.Round = &Round{
 		Game: g, Count: 1,
@@ -229,13 +227,15 @@ func (g *Game) StartGame(onRoundComplete func()) error {
 	g.SendMessageToPlayer(firstDrawer.Id, BroadcastMessage{
 		Type: "open_select_word_modal",
 		Payload: struct {
-			SelectableWords []models.Word `json:"selectableWords"`
+			SelectableWords []models.JSONWord `json:"selectableWords"`
 		}{
-			SelectableWords: g.SelectableWords,
+			SelectableWords: ConvertWordsToJSON(g.SelectableWords),
 		},
 	})
 
-	time.Sleep(3 * time.Second)
+	go func() {
+		time.Sleep(3 * time.Second)
+	}()
 
 	g.Round.IsActive = true
 
@@ -310,10 +310,6 @@ func (g *Game) AdvanceToNextDrawer(onRoundComplete func()) (*Player, error) {
 	return nextDrawer, nil
 }
 
-func (g *Game) HandleWordSelect(playerId string, word string) {
-	g.SetWord(word)
-}
-
 func (g *Game) HandlePlayerDisconnect(playerId string) {
 	for _, player := range g.Players {
 		if player.Id == playerId {
@@ -326,6 +322,10 @@ func (g *Game) HandlePlayerDisconnect(playerId string) {
 		}
 	}
 
+}
+
+func (g *Game) HandleWordSelect(word string) {
+	g.SetWord(word)
 }
 
 func (g *Game) HandlePlayerReconnect(playerId string) {
@@ -407,9 +407,7 @@ func (g *Game) HandleStartGameCountdown() {
 
 		time.Sleep(3 * time.Second)
 
-		g.StartGame(func() {
-
-		})
+		g.StartGame()
 
 	})
 

@@ -102,8 +102,8 @@ func (g *Game) HandleTimerStartMessages(payload map[string]interface{}) {
 	switch timerTypeVal {
 	case "guess_word_timer":
 		g.HandleGuessWordCountdown()
-	case "select_word_timer":
-		g.HandleSelectWordCountdown()
+	// case "select_word_timer":
+	// 	g.HandleSelectWordCountdown()
 	case "start_game_timer":
 		g.HandleStartGameCountdown()
 	default:

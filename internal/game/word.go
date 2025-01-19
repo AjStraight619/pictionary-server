@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/Ajstraight619/pictionary-server/internal/database"
-	"github.com/Ajstraight619/pictionary-server/internal/database/models"
+	m "github.com/Ajstraight619/pictionary-server/internal/database/models"
 	"gorm.io/gorm"
 )
 
@@ -14,7 +14,7 @@ func (g *Game) GetRandomWord(category string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	var word models.Word
+	var word m.Word
 	if err := database.DB.Where("category = ?", category).Order("RANDOM()").First(&word).Error; err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func (g *Game) GetRandomWords(category string, count int) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	var words []models.Word
+	var words []m.Word
 	query := database.DB.Order("RANDOM()").Limit(count) // Base query with random ordering and limit
 
 	// Add category filter if provided
@@ -87,4 +87,16 @@ func (g *Game) SetWord(word string) error {
 	g.SendMessageToPlayer(currentDrawer.Id, closeModalMessage)
 
 	return nil
+}
+
+func ConvertWordsToJSON(words []m.Word) []m.JSONWord {
+	jsonWords := make([]m.JSONWord, len(words))
+	for i, word := range words {
+		jsonWords[i] = m.JSONWord{
+			Id:       word.Id,
+			Word:     word.Word,
+			Category: word.Category,
+		}
+	}
+	return jsonWords
 }

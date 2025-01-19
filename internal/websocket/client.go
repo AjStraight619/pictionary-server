@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -63,10 +64,12 @@ func (c *Client) readPump() {
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 
 	for {
-
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -74,61 +77,62 @@ func (c *Client) readPump() {
 			} else {
 				log.Printf("Read error: %v", err)
 			}
-			break // Ensure the loop exits on error
+			break
 		}
-		log.Printf("Recieved message: %s", string(message))
 
+		log.Printf("Received message: %s", string(message))
+
+		// Handle ping messages
 		if string(message) == "ping" {
-			log.Println("Received ping, responding with pong") // TODO: Add custom heartbeat on frontend
+			log.Println("Received ping, responding with pong")
 			if err := c.conn.WriteMessage(websocket.PongMessage, nil); err != nil {
 				log.Printf("Error sending pong: %v", err)
 			}
 			continue
 		}
 
+		// Parse the message into the expected structure
 		var parsedMessage Message
-
-		err = json.Unmarshal(message, &parsedMessage)
-
-		if err != nil {
+		if err := json.Unmarshal(message, &parsedMessage); err != nil {
 			log.Printf("Error unmarshaling message: %v", err)
 			continue
 		}
 
+		// Handle the parsed message
 		switch parsedMessage.Type {
-		case "start_timer":
-			payloadMap, ok := parsedMessage.Payload.(map[string]interface{})
-			if !ok {
-				log.Println("Invalid payload: expected an object")
+		case "start_timer", "stop_timer":
+			payloadMap, err := parsePayloadAsMap(parsedMessage.Payload)
+			if err != nil {
+				log.Println(err)
 				break
 			}
 
-			c.hub.gameHandler.HandleTimerStartMessages(payloadMap) // Already broadcasting to all clients in fucntion
-			continue
+			if parsedMessage.Type == "start_timer" {
+				c.hub.gameHandler.HandleTimerStartMessages(payloadMap)
+			} else {
+				c.hub.gameHandler.HandleTimerStopMessages(payloadMap)
+			}
 
-		case "stop_timer":
-			payloadMap, ok := parsedMessage.Payload.(map[string]interface{})
+		case "select_word":
+			word, ok := parsedMessage.Payload.(string)
 			if !ok {
-				log.Println("Invalid payload: expected an object")
+				log.Println("Invalid payload: expected a string")
 				break
 			}
 
-			c.hub.gameHandler.HandleTimerStopMessages(payloadMap) // Already broadcasting to all clients in function
-			continue
+			c.hub.gameHandler.HandleWordSelect(word)
 
 		default:
-			break // All other cases break and directly broadcast the message
+			break
 		}
 
+		// Broadcast the message to all clients
 		jsonData, err := json.Marshal(parsedMessage)
-
 		if err != nil {
 			log.Printf("Error marshaling message: %v", err)
 			continue
 		}
-
 		c.hub.Broadcast <- jsonData
-
 	}
 }
 
@@ -213,4 +217,12 @@ func ServeWs(hub *Hub, gameId string, userId string, w http.ResponseWriter, r *h
 	}
 
 	client.hub.Broadcast <- jsonData
+}
+
+func parsePayloadAsMap(payload any) (map[string]interface{}, error) {
+	payloadMap, ok := payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: expected an object")
+	}
+	return payloadMap, nil
 }
