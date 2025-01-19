@@ -57,9 +57,6 @@ func logMessageSend(playerId string, messageType string) {
 }
 
 func (g *Game) SendMessageToPlayer(playerId string, message any) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	for client := range g.Hub.Clients {
 		if client.PlayerId == playerId {
 			jsonData, err := json.Marshal(message)
@@ -68,13 +65,8 @@ func (g *Game) SendMessageToPlayer(playerId string, message any) error {
 				return fmt.Errorf("failed to marshal message: %w", err)
 			}
 
-			select {
-			case client.Send <- jsonData:
-				log.Printf("Message sent to player %s: %s", playerId, string(jsonData))
-				return nil
-			default:
-				return fmt.Errorf("client send channel is full for player %s", playerId)
-			}
+			client.Send <- jsonData
+
 		}
 	}
 
