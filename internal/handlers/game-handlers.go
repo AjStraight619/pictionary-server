@@ -35,6 +35,7 @@ func RegisterGameRoutes(router *gin.Engine, gm *g.GameManager) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload", "details": err.Error()})
 			return
 		}
+		log.Printf("Payload: %+v", payload)
 
 		params := g.CreateGameParams{
 			GameId:   payload.GameId,
@@ -48,9 +49,11 @@ func RegisterGameRoutes(router *gin.Engine, gm *g.GameManager) {
 			},
 		}
 
+		// log the paylaod
+
 		createdGame := gm.CreateGame(params)
 
-		log.Printf("Created game: %+v", createdGame.ToLoggable())
+		// log.Printf("Created game: %+v", createdGame.ToLoggable())
 
 		if createdGame == nil {
 			c.JSON(http.StatusConflict, gin.H{"error": "Game already exists"})

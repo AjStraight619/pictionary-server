@@ -171,7 +171,12 @@ func (g *Game) GetGameState() map[string]any {
 		Options:         g.Options,
 		Round:           roundDetails,
 		SelectableWords: selectableWords,
-		WordToGuess:     g.Round.WordToGuess,
+		WordToGuess: func() string {
+			if g.Round != nil {
+				return g.Round.WordToGuess
+			}
+			return ""
+		}(),
 	}
 
 	return map[string]any{
@@ -233,9 +238,7 @@ func (g *Game) StartGame() error {
 		},
 	})
 
-	go func() {
-		time.Sleep(3 * time.Second)
-	}()
+	g.Delay(3 * time.Second)
 
 	g.Round.IsActive = true
 
@@ -525,4 +528,10 @@ func (g *Game) StopGameTimer() {
 		g.StartGameTimer.Stop()
 		g.StartGameTimer = nil
 	}
+}
+
+func (g *Game) Delay(duration time.Duration) {
+	go func() {
+		time.Sleep(duration)
+	}()
 }

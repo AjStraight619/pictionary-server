@@ -10,6 +10,7 @@ type Round struct {
 	Count                 int
 	CurrentDrawerIdx      int
 	WordToGuess           string
+	RevealedLetters       []rune
 	IsActive              bool
 	PlayersDrawnThisRound map[string]struct{}
 	Game                  *Game

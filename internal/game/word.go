@@ -63,9 +63,17 @@ func (g *Game) SetWord(word string) error {
 	g.Round.WordToGuess = word
 	g.UsedWords = append(g.UsedWords, word)
 
-	updatedGameState := g.GetGameState()
+	currentDrawer := g.Round.getCurrentDrawer()
 
-	// Broadcast the updated game state to all players
+	closeModalMessage := PlayerMessage{
+		PlayerId: currentDrawer.Id,
+		Type:     "close_select_word_modal",
+		Payload:  map[string]interface{}{},
+	}
+
+	g.SendMessageToPlayer(currentDrawer.Id, closeModalMessage)
+
+	updatedGameState := g.GetGameState()
 
 	message := BroadcastMessage{
 		Type:    "game_state",
@@ -76,15 +84,14 @@ func (g *Game) SetWord(word string) error {
 		log.Printf("Failed to broadcast game state: %v", err)
 	}
 
-	currentDrawer := g.Round.getCurrentDrawer()
-
-	closeModalMessage := PlayerMessage{
-		PlayerId: currentDrawer.Id,
-		Type:     "close_select_word_modal",
-		Payload:  map[string]interface{}{},
+	selectedWordMessage := BroadcastMessage{
+		Type:    "selected_word",
+		Payload: map[string]interface{}{"word": word},
 	}
 
-	g.SendMessageToPlayer(currentDrawer.Id, closeModalMessage)
+	if err := g.BroadcastToAll(selectedWordMessage); err != nil {
+		log.Printf("Failed to broadcast selected word: %v", err)
+	}
 
 	return nil
 }
