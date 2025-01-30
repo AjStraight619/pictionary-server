@@ -1,9 +1,9 @@
 package game
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
@@ -27,119 +27,22 @@ type GameOptions struct {
 }
 
 type Game struct {
-	mu              sync.Mutex
-	Id              string
-	Hub             *ws.Hub
-	Players         []*Player
-	playerIds       map[string]struct{}
-	Round           *Round
-	ExperationTimer time.Timer
-	Status          GameStatus
-	Options         GameOptions
-	UsedWords       []string
-	SelectableWords []models.Word
-	StartGameTimer  *Timer
-	SelectWordTimer *Timer
-	GuessWordTimer  *Timer
-	ActiveTimer     string
+	mu                      sync.Mutex          `json:"-"`
+	Id                      string              `json:"id"`
+	Hub                     *ws.Hub             `json:"-"`
+	Players                 []*Player           `json:"players"`
+	playerIds               map[string]struct{} `json:"-"`
+	TempDisconnectedPlayers map[string]*Player  `json:"-"`
+	Round                   *Round              `json:"round"`
+	ExperationTimer         time.Timer          `json:"-"`
+	Status                  GameStatus          `json:"status"`
+	Options                 GameOptions         `json:"options"`
+	UsedWords               []string            `json:"-"`
+	SelectableWords         []models.Word       `json:"selectable_words"`
+	StartGameTimer          *Timer              `json:"-"`
+	ActiveTimer             string              `json:"-"`
+	CurrentTurn             *Turn               `json:"turn"`
 }
-
-// func (g *Game) GetGameState() map[string]any {
-// 	g.mu.Lock()
-// 	defer g.mu.Unlock()
-//
-// 	// Prepare the JSON-ready struct for players
-// 	type JSONPlayer struct {
-// 		Id        string `json:"playerId"`
-// 		Username  string `json:"username"`
-// 		IsLeader  bool   `json:"isLeader"`
-// 		IsDrawing bool   `json:"isDrawing"`
-// 		Score     int16  `json:"score"`
-// 		Color     string `json:"color"`
-// 	}
-//
-// 	players := []JSONPlayer{}
-// 	for _, player := range g.Players {
-// 		players = append(players, JSONPlayer{
-// 			Id:        player.Id,
-// 			Username:  player.Username,
-// 			IsLeader:  player.IsLeader,
-// 			IsDrawing: player.IsDrawing,
-// 			Score:     player.Score,
-// 			Color:     player.Color,
-// 		})
-// 	}
-//
-// 	type JSONSelectableWord struct {
-// 		Id       uint   `json:"id"`
-// 		Word     string `json:"word"`
-// 		Category string `json:"category"`
-// 	}
-//
-// 	selectableWords := []JSONSelectableWord{}
-// 	for _, word := range g.SelectableWords {
-// 		selectableWords = append(selectableWords, JSONSelectableWord{
-// 			Id:       word.Id,
-// 			Word:     word.Word,
-// 			Category: word.Category,
-// 		})
-// 	}
-//
-// 	// Prepare the JSON-ready struct for the round
-// 	type JSONRound struct {
-// 		CurrentDrawer string `json:"currentDrawer"`
-// 		Count         int    `json:"count"`
-// 	}
-//
-// 	roundDetails := JSONRound{
-// 		CurrentDrawer: func() string {
-// 			if g.Round != nil && g.Round.CurrentDrawerIdx >= 0 && g.Round.CurrentDrawerIdx < len(g.Players) {
-// 				return g.Players[g.Round.CurrentDrawerIdx].Id
-// 			}
-// 			return ""
-// 		}(),
-// 		Count: func() int {
-// 			if g.Round != nil {
-// 				return g.Round.Count
-// 			}
-// 			return 0
-// 		}(),
-// 	}
-//
-// 	// Prepare the JSON-ready struct for the game state
-//
-// 	type JSONGameState struct {
-// 		Id              string               `json:"id"`
-// 		Players         []JSONPlayer         `json:"players"`
-// 		Status          GameStatus           `json:"status"`
-// 		Options         GameOptions          `json:"options"`
-// 		Round           JSONRound            `json:"round"`
-// 		SelectableWords []JSONSelectableWord `json:"selectable_words"`
-// 		WordToGuess     string               `json:"word_to_guess"`
-// 		TimerType       string               `json:"timer_type,omitempty"`      // Current active timer
-// 		TimerRemaining  int                  `json:"timer_remaining,omitempty"` // Remaining time for active timer
-// 	}
-//
-// 	// Construct the JSON-ready game state
-// 	gameState := JSONGameState{
-// 		Id:              g.Id,
-// 		Players:         players,
-// 		Status:          g.Status,
-// 		Options:         g.Options,
-// 		Round:           roundDetails,
-// 		SelectableWords: selectableWords,
-// 		WordToGuess: func() string {
-// 			if g.Round != nil {
-// 				return g.Round.WordToGuess
-// 			}
-// 			return ""
-// 		}(),
-// 	}
-//
-// 	return map[string]any{
-// 		"gameState": gameState,
-// 	}
-// }
 
 func (g *Game) GetGameState() map[string]any {
 	g.mu.Lock()
@@ -204,26 +107,26 @@ func (g *Game) GetGameState() map[string]any {
 	}
 
 	// Determine the active timer and its remaining time
-	var timerType string
-	var timerRemaining int
+	// var timerType string
+	// var timerRemaining int
 
-	switch g.ActiveTimer {
-	case "start_game_timer":
-		if g.StartGameTimer != nil && g.StartGameTimer.isRunning {
-			timerType = "start_game_timer"
-			timerRemaining = g.StartGameTimer.GetRemainingTime()
-		}
-	case "select_word_timer":
-		if g.SelectWordTimer != nil && g.SelectWordTimer.isRunning {
-			timerType = "select_word_timer"
-			timerRemaining = g.SelectWordTimer.GetRemainingTime()
-		}
-	case "guess_word_timer":
-		if g.GuessWordTimer != nil && g.GuessWordTimer.isRunning {
-			timerType = "guess_word_timer"
-			timerRemaining = g.GuessWordTimer.GetRemainingTime()
-		}
-	}
+	// switch g.ActiveTimer {
+	// case "start_game_timer":
+	// 	if g.StartGameTimer != nil && g.StartGameTimer.isRunning {
+	// 		timerType = "start_game_timer"
+	// 		timerRemaining = g.StartGameTimer.GetRemainingTime()
+	// 	}
+	// case "select_word_timer":
+	// 	if g.SelectWordTimer != nil && g.SelectWordTimer.isRunning {
+	// 		timerType = "select_word_timer"
+	// 		timerRemaining = g.SelectWordTimer.GetRemainingTime()
+	// 	}
+	// case "guess_word_timer":
+	// 	if g.GuessWordTimer != nil && g.GuessWordTimer.isRunning {
+	// 		timerType = "guess_word_timer"
+	// 		timerRemaining = g.GuessWordTimer.GetRemainingTime()
+	// 	}
+	// }
 
 	// Prepare the JSON-ready struct for the game state
 	type JSONGameState struct {
@@ -234,8 +137,9 @@ func (g *Game) GetGameState() map[string]any {
 		Round           JSONRound            `json:"round"`
 		SelectableWords []JSONSelectableWord `json:"selectable_words"`
 		WordToGuess     string               `json:"word_to_guess"`
-		TimerType       string               `json:"timer_type,omitempty"`      // Current active timer
-		TimerRemaining  int                  `json:"timer_remaining,omitempty"` // Remaining time for active timer
+		// TimerType       string               `json:"timer_type,omitempty"`
+		// TimerRemaining  int                  `json:"timer_remaining,omitempty"`
+		RevealedLetters []rune `json:"revealed_letters"`
 	}
 
 	// Construct the JSON-ready game state
@@ -247,13 +151,20 @@ func (g *Game) GetGameState() map[string]any {
 		Round:           roundDetails,
 		SelectableWords: selectableWords,
 		WordToGuess: func() string {
-			if g.Round != nil {
-				return g.Round.WordToGuess
+			if g.CurrentTurn != nil {
+				return g.CurrentTurn.Word
 			}
 			return ""
 		}(),
-		TimerType:      timerType,
-		TimerRemaining: timerRemaining,
+		// TimerType:      timerType,
+		// TimerRemaining: timerRemaining,
+
+		RevealedLetters: func() []rune {
+			if g.CurrentTurn != nil {
+				return g.CurrentTurn.Revealed
+			}
+			return []rune{}
+		}(),
 	}
 
 	return map[string]any{
@@ -293,7 +204,6 @@ func (g *Game) GetPlayerById(id string) *Player {
 }
 
 func (g *Game) StartGame() error {
-
 	g.Round = &Round{
 		Game: g, Count: 1,
 		PlayersDrawnThisRound: make(map[string]struct{}),
@@ -306,8 +216,9 @@ func (g *Game) StartGame() error {
 
 	g.GetRandomWords("", 3)
 
-	g.SendMessageToPlayer(firstDrawer.Id, BroadcastMessage{
-		Type: "open_select_word_modal",
+	g.SendMessageToPlayer(firstDrawer.Id, PlayerMessage{
+		PlayerId: firstDrawer.Id,
+		Type:     "open_select_word_modal",
 		Payload: struct {
 			SelectableWords []models.JSONWord `json:"selectable_words"`
 		}{
@@ -317,91 +228,48 @@ func (g *Game) StartGame() error {
 
 	g.Delay(3 * time.Second)
 
-	g.Round.IsActive = true
+	// Initialize the current turn
+	g.CurrentTurn = NewTurn(firstDrawer, g)
 
-	g.Round.StartSelectWordTimer(time.Second*time.Duration(g.Options.SelectWordTimer), func() {
+	// TODO: Send update turn message to all players.
+
+	// Start the select word timer for the turn
+	g.CurrentTurn.StartSelectWordTimer(time.Second*time.Duration(g.Options.SelectWordTimer), func() {
 		log.Printf("Select word timer ended")
 
-		if g.Round.WordToGuess == "" {
+		log.Printf("Selectable words: %v", g.SelectableWords)
+
+		if g.CurrentTurn.Word == "" && len(g.SelectableWords) > 0 {
 			word := g.SelectableWords[0].Word
 			g.SetWord(word)
 		}
-
 	})
 
 	return nil
 }
 
-func (g *Game) AdvanceToNextDrawer(onRoundComplete func()) (*Player, error) {
-	totalPlayers := len(g.Players)
-
-	if totalPlayers == 0 {
-		return nil, fmt.Errorf("no players in the game")
-	}
-
-	// Mark the current drawer as having drawn
-	if g.Round.IsActive {
-		currentDrawer := g.Players[g.Round.CurrentDrawerIdx]
-		currentDrawer.IsDrawing = false
-		currentDrawer.HasDrawn = true
-	}
-
-	// Check if all players have drawn
-	if allPlayersHaveDrawn(g.Players) {
-		// End the current round and start a new one
-		g.Round.NextRound()
-
-		// Reset all players' HasDrawn status for the new round
-		for _, player := range g.Players {
-			player.HasDrawn = false
-		}
-
-		log.Printf("All players have drawn. Moving to round %d!", g.Round.Count)
-
-		// Call the round complete handler
-		onRoundComplete()
-
-		// Stop advancing if the game has reached its maximum rounds
-		if g.Round.Count >= g.Options.MaxRounds {
-			g.Round.IsActive = false
-			log.Println("Game over!")
-			return nil, fmt.Errorf("game over")
-		}
-	}
-
-	// Advance to the next drawer
-	g.Round.NextDrawer(totalPlayers)
-
-	// Set the new drawer's `IsDrawing` to true
-	nextDrawer := g.Players[g.Round.CurrentDrawerIdx]
-	nextDrawer.IsDrawing = true
-	g.Round.IsActive = true
-
-	// Stop any existing timers before starting a new one
-	g.Round.StopGuessWordTimer()
-
-	// Start the round timer for the new drawer
-	roundDuration := time.Duration(g.Options.TurnTimer) * time.Second
-	g.Round.StartGuessWordTimer(roundDuration, func() {
-		log.Printf("Turn %d timer ended!", g.Round.Count)
-		onRoundComplete()
-	})
-
-	return nextDrawer, nil
-}
-
 func (g *Game) HandlePlayerDisconnect(playerId string) {
-	for _, player := range g.Players {
-		if player.Id == playerId {
-			log.Printf("Player disconnected: %s", playerId)
-			player.StartDisconnectionTimer(30*time.Second, func() {
-				log.Printf("Player disconnection timer expired: %s", playerId)
-				g.RemovePlayer(playerId)
-			})
-			return
-		}
+	removedPlayer := g.RemovePlayer(playerId)
+	if removedPlayer == nil {
+		log.Printf("Player with ID %s not found during disconnect handling", playerId)
+		return
 	}
 
+	// Add the player to the temporary disconnected players map
+	g.mu.Lock()
+	g.TempDisconnectedPlayers[playerId] = removedPlayer
+	g.mu.Unlock()
+
+	// Start the disconnection timer
+	removedPlayer.StartDisconnectionTimer(30*time.Second, func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		delete(g.TempDisconnectedPlayers, playerId)
+		log.Printf("Player %s permanently removed after disconnection timeout.", playerId)
+
+		log.Println("----Game state after player disconnect----")
+		g.Print()
+	})
 }
 
 func (g *Game) HandleWordSelect(word string) {
@@ -410,58 +278,58 @@ func (g *Game) HandleWordSelect(word string) {
 }
 
 func (g *Game) HandlePlayerReconnect(playerId string) {
-	var reconnectedPlayer *Player
-	playerFound := false
+	g.mu.Lock()
 
-	// Check if the player exists and handle reconnection
-	for _, player := range g.Players {
-		if player.Id == playerId {
-			log.Printf("Player reconnected: %s", playerId)
-			player.StopDisconnectionTimer()
-			reconnectedPlayer = player
-			playerFound = true
-			break
+	var reconnectedPlayer *Player
+
+	// Check if the player is in TempDisconnectedPlayers
+	if player, found := g.TempDisconnectedPlayers[playerId]; found {
+		reconnectedPlayer = player
+		delete(g.TempDisconnectedPlayers, playerId) // Remove from TempDisconnectedPlayers
+		g.Players = append(g.Players, player)       // Add back to active players
+		log.Printf("Player %s reconnected and added back to the game.", playerId)
+	} else {
+		// Check if the player is already in the active players list
+		for _, player := range g.Players {
+			if player.Id == playerId {
+				reconnectedPlayer = player
+				log.Printf("Player %s reconnected but was already in the game.", playerId)
+				break
+			}
 		}
 	}
 
-	// If the player wasn't found in the game, log and return
-	if !playerFound {
-		log.Printf("Player with ID %s not found in game", playerId)
+	if reconnectedPlayer == nil {
+		log.Printf("Player with ID %s not found in game or TempDisconnectedPlayers.", playerId)
 		return
 	}
 
-	message := BroadcastMessage{
-		Type: "player_joined",
-		Payload: struct {
-			PlayerId  string `json:"playerId"`
-			Username  string `json:"username"`
-			IsLeader  bool   `json:"isLeader"`
-			IsDrawing bool   `json:"isDrawing"`
-			Score     int16  `json:"score"`
-		}{
-			PlayerId:  reconnectedPlayer.Id,
-			Username:  reconnectedPlayer.Username,
-			IsLeader:  reconnectedPlayer.IsLeader,
-			IsDrawing: reconnectedPlayer.IsDrawing,
-			Score:     reconnectedPlayer.Score,
-		},
-	}
+	reconnectedPlayer.StopDisconnectionTimer()
 
-	jsonData, err := json.Marshal(message)
-	if err != nil {
-		log.Printf("Error marshaling message for player %s: %v", playerId, err)
-		return
-	}
+	g.mu.Unlock()
 
-	g.Hub.Broadcast <- jsonData
+	// NOTE: Need to handle removing players differently
+
+	// // Broadcast updated game state
+	// updatedGameState := g.GetGameState()
+	// if err := g.BroadcastToAll(BroadcastMessage{
+	// 	Type:    "game_state",
+	// 	Payload: updatedGameState,
+	// }); err != nil {
+	// 	log.Printf("Failed to broadcast updated game state: %v", err)
+	// }
+	//
+	// log.Println("----Game state after player reconnect----")
+	g.Print()
 }
 
-func (g *Game) RemovePlayer(playerId string) {
+func (g *Game) RemovePlayer(playerId string) *Player {
 	g.mu.Lock()
-	defer g.mu.Unlock()
 
 	var removedPlayer *Player
 	playerFound := false
+
+	// Find and remove the player
 	for i, player := range g.Players {
 		if player.Id == playerId {
 			removedPlayer = player
@@ -475,9 +343,14 @@ func (g *Game) RemovePlayer(playerId string) {
 
 	if !playerFound {
 		log.Printf("Player with ID %s not found in game", playerId)
-		return
+		return nil
 	}
 
+	g.mu.Unlock() // Unlock before updating the game state avoid deadlock
+
+	updatedGameState := g.GetGameState()
+
+	// Send a toast message to the clients
 	message := BroadcastMessage{
 		Type: "player_left",
 		Payload: struct {
@@ -489,15 +362,20 @@ func (g *Game) RemovePlayer(playerId string) {
 		},
 	}
 
-	jsonData, err := json.Marshal(message)
-
-	if err != nil {
-		log.Printf("Error marsheling message for player %s: %v", playerId, err)
-		return
+	if err := g.BroadcastToAll(message); err != nil {
+		log.Printf("Failed to broadcast player left message: %v", err)
 	}
 
-	g.Hub.Broadcast <- jsonData
+	// Broadcast the updated game state
 
+	if err := g.BroadcastToAll(BroadcastMessage{
+		Type:    "game_state",
+		Payload: updatedGameState,
+	}); err != nil {
+		log.Printf("Failed to broadcast updated game state: %v", err)
+	}
+
+	return removedPlayer
 }
 
 func (g *Game) RunCountdownTimer(duration time.Duration, messageType string) {
@@ -535,6 +413,157 @@ func (g *Game) RunCountdownTimer(duration time.Duration, messageType string) {
 
 	// Block execution until the timer is over
 	<-done
+}
+
+func (g *Game) HandlePlayerGuess(playerId string, username string, guess string) {
+	if g.CurrentTurn == nil {
+		log.Println("Current turn is nil")
+		return
+	}
+
+	if g.CurrentTurn.allPlayersGuessedCorrect() {
+		currentDrawer := g.Round.getCurrentDrawer()
+		g.CurrentTurn.Game.EndCurrentTurnAndStartNext(currentDrawer)
+
+	}
+
+	if playerId == g.CurrentTurn.Drawer.Id {
+		log.Println("Drawer cannot guess the word")
+		return
+	}
+
+	correctWord := g.CurrentTurn.Word
+	distance := levenshteinDistance(guess, correctWord)
+	threshold := 2
+
+	if g.CurrentTurn.GuessTimer.isRunning {
+
+		if guess == correctWord {
+
+			player := g.GetPlayerById(playerId)
+			g.CalculateScore(player)
+			player.HasGuessedCorrect = true
+
+			if err := g.BroadcastToAll(BroadcastMessage{
+				Type: "player_guess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    username + " guessed the word!",
+				},
+			}); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+
+		} else if distance <= threshold {
+			if err := g.BroadcastToAll(BroadcastMessage{
+				Type: "player_guess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    username + " is close!",
+				},
+			}); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+
+		} else {
+			// Broadcast the player's guess to all users
+			if err := g.BroadcastToAll(BroadcastMessage{
+				Type: "player_guess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    guess,
+				},
+			}); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+		}
+	}
+
+}
+
+func levenshteinDistance(s1, s2 string) int {
+	m, n := len(s1), len(s2)
+	dp := make([][]int, m+1)
+
+	// Initialize the DP table
+	for i := range dp {
+		dp[i] = make([]int, n+1)
+	}
+
+	// Base cases
+	for i := 0; i <= m; i++ {
+		dp[i][0] = i
+	}
+	for j := 0; j <= n; j++ {
+		dp[0][j] = j
+	}
+
+	// Fill the DP table
+	for i := 1; i <= m; i++ {
+		for j := 1; j <= n; j++ {
+			if s1[i-1] == s2[j-1] {
+				dp[i][j] = dp[i-1][j-1]
+			} else {
+				dp[i][j] = 1 + int(math.Min(math.Min(
+					float64(dp[i-1][j]), // Deletion
+					float64(dp[i][j-1]), // Insertion
+				), float64(dp[i-1][j-1]))) // Substitution
+			}
+		}
+	}
+
+	return dp[m][n]
+}
+
+func (g *Game) CalculateScore(player *Player) {
+
+	// Prevent calculating score multiple times
+	if player.HasGuessedCorrect {
+		return
+	}
+
+	maxTime := g.Options.TurnTimer
+	remainingTime := g.CurrentTurn.GuessTimer.GetRemainingTime()
+
+	const baseScore = 100      // Fixed base score
+	const timeBonusFactor = 50 // Maximum bonus points for speed
+
+	// Calculate time bonus
+	timeBonus := int(float64(remainingTime) / float64(maxTime) * float64(timeBonusFactor))
+
+	totalScore := baseScore + timeBonus
+
+	player.Score += int16(totalScore)
+
+	message := BroadcastMessage{
+		Type: "score_update",
+		Payload: struct {
+			PlayerId string `json:"playerId"`
+			Score    int16  `json:"score"`
+		}{
+			PlayerId: player.Id,
+			Score:    player.Score,
+		},
+	}
+	if err := g.BroadcastToAll(message); err != nil {
+		log.Printf("Failed to broadcast score update: %v", err)
+	}
+
 }
 
 func (g *Game) StopGameTimer() {

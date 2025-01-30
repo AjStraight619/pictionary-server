@@ -39,6 +39,8 @@ func (gm *GameManager) CreateGame(params CreateGameParams) *Game {
 		Players: []*Player{
 			{Id: params.PlayerId, Username: params.Username, IsLeader: true, Color: "#FF5733"},
 		},
+		Status:                  0,
+		TempDisconnectedPlayers: make(map[string]*Player),
 		playerIds: map[string]struct{}{
 			params.PlayerId: {}, // Empty set of playerId's
 		},

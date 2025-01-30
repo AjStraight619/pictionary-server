@@ -2,6 +2,7 @@ package game
 
 import (
 	"log"
+	"time"
 
 	"github.com/Ajstraight619/pictionary-server/internal/database"
 	m "github.com/Ajstraight619/pictionary-server/internal/database/models"
@@ -19,7 +20,7 @@ func (g *Game) GetRandomWord(category string) error {
 		return err
 	}
 
-	g.Round.WordToGuess = word.Word
+	g.CurrentTurn.Word = word.Word
 	g.UsedWords = append(g.UsedWords, word.Word)
 
 	return nil
@@ -57,41 +58,47 @@ func (g *Game) GetRandomWords(category string, count int) error {
 }
 
 func (g *Game) SetWord(word string) error {
+	log.Println("Acquiring game lock in SetWord")
 	g.mu.Lock()
-	defer g.mu.Unlock()
 
-	g.Round.WordToGuess = word
+	// Update the game state
+	log.Printf("Setting word to guess: %s", word)
+	g.CurrentTurn.Word = word
 	g.UsedWords = append(g.UsedWords, word)
-
+	g.SelectableWords = nil
 	currentDrawer := g.Round.getCurrentDrawer()
 
-	closeModalMessage := PlayerMessage{
-		PlayerId: currentDrawer.Id,
-		Type:     "close_select_word_modal",
-		Payload:  map[string]interface{}{},
+	closeModalMessage := BroadcastMessage{
+		Type:    "close_select_word_modal",
+		Payload: map[string]interface{}{},
 	}
 
-	g.SendMessageToPlayer(currentDrawer.Id, closeModalMessage)
+	g.mu.Unlock()
 
-	updatedGameState := g.GetGameState()
+	// Send the close modal message to player that selected the word
 
+	if err := g.SendMessageToPlayer(currentDrawer.Id, closeModalMessage); err != nil {
+		log.Printf("Failed to send close modal message: %v", err)
+		return err
+	}
+	log.Println("Close modal message sent successfully")
+
+	// Broadcast updated game state
+	gameState := g.GetGameState()
 	message := BroadcastMessage{
 		Type:    "game_state",
-		Payload: updatedGameState,
+		Payload: gameState,
 	}
-
 	if err := g.BroadcastToAll(message); err != nil {
 		log.Printf("Failed to broadcast game state: %v", err)
 	}
 
-	selectedWordMessage := BroadcastMessage{
-		Type:    "selected_word",
-		Payload: map[string]interface{}{"word": word},
-	}
+	g.Delay(3 * time.Second)
 
-	if err := g.BroadcastToAll(selectedWordMessage); err != nil {
-		log.Printf("Failed to broadcast selected word: %v", err)
-	}
+	g.CurrentTurn.StartGuessTimer(time.Second*time.Duration(g.Options.TurnTimer), func() {
+		log.Printf("Guess word timer completed")
+
+	})
 
 	return nil
 }

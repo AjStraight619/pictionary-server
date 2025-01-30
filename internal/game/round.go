@@ -1,128 +1,75 @@
 package game
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
-	"time"
 )
 
 type Round struct {
 	Count                 int
 	CurrentDrawerIdx      int
-	WordToGuess           string
-	RevealedLetters       []rune
-	IsActive              bool
 	PlayersDrawnThisRound map[string]struct{}
 	Game                  *Game
-	selectWordTimer       *Timer
-	guessWordTimer        *Timer
 }
 
-func (r *Round) NextRound() {
-	r.Count++
-	r.PlayersDrawnThisRound = make(map[string]struct{})
-	log.Printf("Starting round %d", r.Count)
-}
-
-func (r *Round) NextDrawer(numPlayers int) {
+// Advance to the next drawer, handling end-of-round logic if necessary.
+func (r *Round) NextDrawer() (*Player, error) {
+	numPlayers := len(r.Game.Players)
 	if numPlayers == 0 {
-		return
+		return nil, fmt.Errorf("no players in the game")
 	}
+
+	currentDrawer := r.Game.Players[r.CurrentDrawerIdx]
+	currentDrawer.IsDrawing = false
 
 	for {
 		r.CurrentDrawerIdx = (r.CurrentDrawerIdx + 1) % numPlayers
-
 		nextPlayer := r.Game.Players[r.CurrentDrawerIdx]
-		if !nextPlayer.HasDrawn {
+
+		// Skip players who have already drawn in this round.
+		if _, drawn := r.PlayersDrawnThisRound[nextPlayer.Id]; !drawn {
 			nextPlayer.IsDrawing = true
+			r.PlayersDrawnThisRound[nextPlayer.Id] = struct{}{}
 			log.Printf("Next drawer is %s (ID: %s)", nextPlayer.Username, nextPlayer.Id)
-			return
+			return nextPlayer, nil
 		}
 
-		if allPlayersHaveDrawn(r.Game.Players) {
-			r.NextRound()
-			return
+		// If all players have drawn, start a new round.
+		if len(r.PlayersDrawnThisRound) == numPlayers {
+			if err := r.NextRound(); err != nil {
+				return nil, err
+			}
+			return r.getCurrentDrawer(), nil
 		}
+
 	}
 }
 
+// Start a new round and reset player statuses.
+func (r *Round) NextRound() error {
+	// Check if the game has reached its maximum rounds.
+	if r.Count >= r.Game.Options.MaxRounds {
+		r.Game.Status = StatusFinished
+		log.Println("Game over!")
+		return fmt.Errorf("game over")
+	}
+
+	r.Count++
+	r.PlayersDrawnThisRound = make(map[string]struct{})
+	log.Printf("Starting round %d", r.Count)
+
+	// Reset player statuses.
+	for _, player := range r.Game.Players {
+		player.HasDrawn = false
+		player.IsDrawing = false
+	}
+	return nil
+}
+
+// Get the current drawer.
 func (r *Round) getCurrentDrawer() *Player {
+	if len(r.Game.Players) == 0 {
+		return nil
+	}
 	return r.Game.Players[r.CurrentDrawerIdx]
-}
-
-func (r *Round) StartSelectWordTimer(duration time.Duration, onExpire func()) {
-	r.selectWordTimer = NewTimer(duration, onExpire)
-	go func() {
-		for secondsLeft := range r.selectWordTimer.GetCountdownChannel() {
-
-			message := TimerMessage{
-				Type: "select_word_timer",
-				Payload: TimerPayload{
-					TimeRemaining: secondsLeft,
-				},
-			}
-
-			jsonData, err := json.Marshal(message)
-			if err != nil {
-				log.Printf("Failed to marshal JSON: %v", err)
-				continue
-			}
-
-			r.Game.Hub.Broadcast <- jsonData
-
-			// Log the remaining time for debugging
-			log.Printf("Time left to select a word: %d seconds", secondsLeft)
-		}
-	}()
-	r.selectWordTimer.Start()
-}
-
-func (r *Round) StartGuessWordTimer(duration time.Duration, onExpire func()) {
-	r.guessWordTimer = NewTimer(duration, onExpire)
-	go func() {
-		for secondsLeft := range r.guessWordTimer.GetCountdownChannel() {
-
-			message := TimerMessage{
-				Type: "guess_word_timer",
-				Payload: TimerPayload{
-					TimeRemaining: secondsLeft,
-				},
-			}
-
-			jsonData, err := json.Marshal(message)
-
-			if err != nil {
-				log.Printf("Failed to marshal JSON: %v", err)
-				continue
-			}
-
-			r.Game.Hub.Broadcast <- jsonData
-
-			log.Printf("Time left to guess the word: %d seconds", secondsLeft)
-		}
-	}()
-	r.guessWordTimer.Start()
-}
-
-func (r *Round) StopSelectWordTimer() {
-	if r.selectWordTimer != nil {
-		r.selectWordTimer.Stop()
-		r.selectWordTimer = nil
-	}
-}
-
-func (r *Round) StopGuessWordTimer() {
-	if r.guessWordTimer != nil {
-		r.guessWordTimer.Stop()
-		r.guessWordTimer = nil
-	}
-}
-
-func allPlayersHaveDrawn(players []*Player) bool {
-	for _, player := range players {
-		if !player.HasDrawn {
-			return false
-		}
-	}
-	return true
 }

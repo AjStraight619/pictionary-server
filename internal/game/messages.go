@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 )
 
 // Message types for consistency
@@ -60,13 +61,18 @@ func (g *Game) SendMessageToPlayer(playerId string, message any) error {
 	for client := range g.Hub.Clients {
 		if client.PlayerId == playerId {
 			jsonData, err := json.Marshal(message)
-
 			if err != nil {
 				return fmt.Errorf("failed to marshal message: %w", err)
 			}
 
-			client.Send <- jsonData
-
+			select {
+			case client.Send <- jsonData:
+				log.Printf("Message sent to player %s: %s", playerId, jsonData)
+				return nil
+			case <-time.After(500 * time.Millisecond): // Optional timeout
+				log.Printf("Send channel for player %s is full, skipping message", playerId)
+				return fmt.Errorf("send channel for player %s is full", playerId)
+			}
 		}
 	}
 
@@ -94,8 +100,6 @@ func (g *Game) HandleTimerStartMessages(payload map[string]interface{}) {
 	switch timerTypeVal {
 	case "guess_word_timer":
 		g.HandleGuessWordCountdown()
-	// case "select_word_timer":
-	// 	g.HandleSelectWordCountdown()
 	case "start_game_timer":
 		g.HandleStartGameCountdown()
 	default:
@@ -112,9 +116,9 @@ func (g *Game) HandleTimerStopMessages(payload map[string]interface{}) {
 
 	switch timerTypeVal {
 	case "guess_word_timer":
-		g.Round.StopGuessWordTimer()
+		g.CurrentTurn.StopGuessTimer()
 	case "select_word_timer":
-		g.Round.StopSelectWordTimer()
+		g.CurrentTurn.StopSelectWordTimer()
 	case "start_game_timer":
 		g.StopGameTimer()
 

@@ -6,6 +6,7 @@ type GameHandler interface {
 	HandleWordSelect(word string)
 	HandleTimerStartMessages(payload map[string]interface{})
 	HandleTimerStopMessages(payload map[string]interface{})
+	HandlePlayerGuess(playerId string, username string, guess string)
 	GetGameState() map[string]any
 }
 
@@ -32,9 +33,11 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.Register:
 			h.Clients[client] = true
+			// go h.gameHandler.HandlePlayerReconnect(client.PlayerId)
 		case client := <-h.Unregister:
 			if _, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
+				// go h.gameHandler.HandlePlayerDisconnect(client.PlayerId)
 				close(client.Send)
 			}
 

@@ -1,19 +1,20 @@
 package game
 
 import (
+	"fmt"
 	"time"
 )
 
 type Player struct {
-	Id             string
-	Username       string
-	IsLeader       bool
-	IsDrawing      bool
-	IsGuessCorrect bool
-	Score          int16
-	Color          string
-	HasDrawn       bool
-	Timer          *time.Timer
+	Id                string `json:"playerId"`
+	Username          string `json:"username"`
+	IsLeader          bool   `json:"isLeader"`
+	IsDrawing         bool   `json:"isDrawing"`
+	HasGuessedCorrect bool   `json:"hasGuessedCorrect"`
+	Score             int16  `json:"score"`
+	Color             string `json:"color"`
+	HasDrawn          bool
+	Timer             *time.Timer
 }
 
 var colors = []string{
@@ -28,7 +29,6 @@ var colors = []string{
 }
 
 func CreatePlayer(id string, username string, isLeader bool) *Player {
-
 	return &Player{
 		Id:       id,
 		Username: username,
@@ -67,4 +67,17 @@ func AssignUniqueColor(players []*Player) string {
 	}
 
 	return ""
+}
+
+func (p *Player) Print() {
+	fmt.Printf("Player Details:\n")
+	fmt.Printf("ID: %s\n", p.Id)
+	fmt.Printf("Username: %s\n", p.Username)
+	fmt.Printf("Is Leader: %v\n", p.IsLeader)
+	fmt.Printf("Is Drawing: %v\n", p.IsDrawing)
+	fmt.Printf("Has Guessed Correctly: %v\n", p.HasGuessedCorrect)
+	fmt.Printf("Score: %d\n", p.Score)
+	fmt.Printf("Color: %s\n", p.Color)
+	fmt.Printf("Has Drawn This Round: %v\n", p.HasDrawn)
+	fmt.Printf("Disconnection Timer Active: %v\n", p.Timer != nil)
 }

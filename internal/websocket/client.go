@@ -15,6 +15,12 @@ type BroadcastMessage struct {
 	Payload any    `json:"payload"`
 }
 
+type PlayerGuessPayload struct {
+	PlayerId string `json:"playerId"`
+	Username string `json:"username"`
+	Guess    string `json:"guess"`
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  2048,
 	WriteBufferSize: 2048,
@@ -80,8 +86,6 @@ func (c *Client) readPump() {
 			break
 		}
 
-		log.Printf("Received message: %s", string(message))
-
 		// Handle ping messages
 		if string(message) == "ping" {
 			log.Println("Received ping, responding with pong")
@@ -90,6 +94,14 @@ func (c *Client) readPump() {
 			}
 			continue
 		}
+
+		// if string(message) == "ping" {
+		// 	log.Println("Received ping, responding with pong")
+		// 	if err := c.conn.WriteMessage(websocket.TextMessage, []byte("pong")); err != nil {
+		// 		log.Printf("Error sending pong: %v", err)
+		// 	}
+		// 	continue
+		// }
 
 		// Parse the message into the expected structure
 		var parsedMessage Message
@@ -114,13 +126,42 @@ func (c *Client) readPump() {
 			}
 
 		case "select_word":
-			word, ok := parsedMessage.Payload.(string)
+			payload, ok := parsedMessage.Payload.(map[string]interface{})
 			if !ok {
-				log.Println("Invalid payload: expected a string")
+				log.Println("Invalid payload: expected an object")
+				break
+			}
+
+			word, ok := payload["word"].(string)
+			if !ok {
+				log.Println("Invalid payload: expected 'word' to be a string")
 				break
 			}
 
 			c.hub.gameHandler.HandleWordSelect(word)
+
+		case "player_guess":
+			// Define the expected payload structure
+			var playerGuessPayload PlayerGuessPayload
+
+			// Parse the payload into the struct
+			payloadBytes, err := json.Marshal(parsedMessage.Payload) // Convert interface{} to []byte
+			if err != nil {
+				log.Printf("Failed to marshal payload: %v", err)
+				break
+			}
+
+			err = json.Unmarshal(payloadBytes, &playerGuessPayload)
+			if err != nil {
+				log.Printf("Invalid payload for player_guess: %v", err)
+				break
+			}
+
+			// Now you can access `playerGuessPayload.PlayerId` and `playerGuessPayload.Guess`
+
+			// Handle the guess
+			c.hub.gameHandler.HandlePlayerGuess(playerGuessPayload.PlayerId, playerGuessPayload.Username, playerGuessPayload.Guess)
+			continue
 
 		default:
 			break
