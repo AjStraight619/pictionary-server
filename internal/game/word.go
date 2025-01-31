@@ -69,7 +69,7 @@ func (g *Game) SetWord(word string) error {
 	currentDrawer := g.Round.getCurrentDrawer()
 
 	closeModalMessage := BroadcastMessage{
-		Type:    "close_select_word_modal",
+		Type:    "closeSelectWordModal",
 		Payload: map[string]interface{}{},
 	}
 
@@ -86,7 +86,7 @@ func (g *Game) SetWord(word string) error {
 	// Broadcast updated game state
 	gameState := g.GetGameState()
 	message := BroadcastMessage{
-		Type:    "game_state",
+		Type:    "gameState",
 		Payload: gameState,
 	}
 	if err := g.BroadcastToAll(message); err != nil {
@@ -103,14 +103,14 @@ func (g *Game) SetWord(word string) error {
 	return nil
 }
 
-func ConvertWordsToJSON(words []m.Word) []m.JSONWord {
-	jsonWords := make([]m.JSONWord, len(words))
-	for i, word := range words {
-		jsonWords[i] = m.JSONWord{
-			Id:       word.Id,
-			Word:     word.Word,
-			Category: word.Category,
-		}
-	}
-	return jsonWords
-}
+// func ConvertWordsToJSON(words []m.Word) []m.JSONWord {
+// 	jsonWords := make([]m.JSONWord, len(words))
+// 	for i, word := range words {
+// 		jsonWords[i] = m.JSONWord{
+// 			Id:       word.Id,
+// 			Word:     word.Word,
+// 			Category: word.Category,
+// 		}
+// 	}
+// 	return jsonWords
+// }

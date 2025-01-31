@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Ajstraight619/pictionary-server/internal/database/models"
+	m "github.com/Ajstraight619/pictionary-server/internal/database/models"
 	ws "github.com/Ajstraight619/pictionary-server/internal/websocket"
 )
 
@@ -33,34 +33,24 @@ type Game struct {
 	Players                 []*Player           `json:"players"`
 	playerIds               map[string]struct{} `json:"-"`
 	TempDisconnectedPlayers map[string]*Player  `json:"-"`
-	Round                   *Round              `json:"round"`
+	Round                   *Round              `json:"round,omitempty"`
 	ExperationTimer         time.Timer          `json:"-"`
 	Status                  GameStatus          `json:"status"`
 	Options                 GameOptions         `json:"options"`
 	UsedWords               []string            `json:"-"`
-	SelectableWords         []models.Word       `json:"selectable_words"`
+	SelectableWords         []m.Word            `json:"selectableWords"`
 	StartGameTimer          *Timer              `json:"-"`
 	ActiveTimer             string              `json:"-"`
-	CurrentTurn             *Turn               `json:"turn"`
+	CurrentTurn             *Turn               `json:"turn,omitempty"`
 }
 
 func (g *Game) GetGameState() map[string]any {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	// g.mu.Lock()
+	// defer g.mu.Unlock()
 
-	// Prepare the JSON-ready struct for players
-	type JSONPlayer struct {
-		Id        string `json:"playerId"`
-		Username  string `json:"username"`
-		IsLeader  bool   `json:"isLeader"`
-		IsDrawing bool   `json:"isDrawing"`
-		Score     int16  `json:"score"`
-		Color     string `json:"color"`
-	}
-
-	players := []JSONPlayer{}
+	players := []Player{}
 	for _, player := range g.Players {
-		players = append(players, JSONPlayer{
+		players = append(players, Player{
 			Id:        player.Id,
 			Username:  player.Username,
 			IsLeader:  player.IsLeader,
@@ -70,15 +60,9 @@ func (g *Game) GetGameState() map[string]any {
 		})
 	}
 
-	type JSONSelectableWord struct {
-		Id       uint   `json:"id"`
-		Word     string `json:"word"`
-		Category string `json:"category"`
-	}
-
-	selectableWords := []JSONSelectableWord{}
+	selectableWords := []m.Word{}
 	for _, word := range g.SelectableWords {
-		selectableWords = append(selectableWords, JSONSelectableWord{
+		selectableWords = append(selectableWords, m.Word{
 			Id:       word.Id,
 			Word:     word.Word,
 			Category: word.Category,
@@ -106,44 +90,20 @@ func (g *Game) GetGameState() map[string]any {
 		}(),
 	}
 
-	// Determine the active timer and its remaining time
-	// var timerType string
-	// var timerRemaining int
-
-	// switch g.ActiveTimer {
-	// case "start_game_timer":
-	// 	if g.StartGameTimer != nil && g.StartGameTimer.isRunning {
-	// 		timerType = "start_game_timer"
-	// 		timerRemaining = g.StartGameTimer.GetRemainingTime()
-	// 	}
-	// case "select_word_timer":
-	// 	if g.SelectWordTimer != nil && g.SelectWordTimer.isRunning {
-	// 		timerType = "select_word_timer"
-	// 		timerRemaining = g.SelectWordTimer.GetRemainingTime()
-	// 	}
-	// case "guess_word_timer":
-	// 	if g.GuessWordTimer != nil && g.GuessWordTimer.isRunning {
-	// 		timerType = "guess_word_timer"
-	// 		timerRemaining = g.GuessWordTimer.GetRemainingTime()
-	// 	}
-	// }
-
 	// Prepare the JSON-ready struct for the game state
-	type JSONGameState struct {
-		Id              string               `json:"id"`
-		Players         []JSONPlayer         `json:"players"`
-		Status          GameStatus           `json:"status"`
-		Options         GameOptions          `json:"options"`
-		Round           JSONRound            `json:"round"`
-		SelectableWords []JSONSelectableWord `json:"selectable_words"`
-		WordToGuess     string               `json:"word_to_guess"`
-		// TimerType       string               `json:"timer_type,omitempty"`
-		// TimerRemaining  int                  `json:"timer_remaining,omitempty"`
-		RevealedLetters []rune `json:"revealed_letters"`
+	type GameState struct {
+		Id              string      `json:"id"`
+		Players         []Player    `json:"players"`
+		Status          GameStatus  `json:"status"`
+		Options         GameOptions `json:"options"`
+		Round           JSONRound   `json:"round"`
+		SelectableWords []m.Word    `json:"selectableWords"`
+		WordToGuess     string      `json:"wordToGuess"`
+		RevealedLetters []rune      `json:"revealedLetters"`
 	}
 
 	// Construct the JSON-ready game state
-	gameState := JSONGameState{
+	gameState := GameState{
 		Id:              g.Id,
 		Players:         players,
 		Status:          g.Status,
@@ -156,12 +116,9 @@ func (g *Game) GetGameState() map[string]any {
 			}
 			return ""
 		}(),
-		// TimerType:      timerType,
-		// TimerRemaining: timerRemaining,
-
 		RevealedLetters: func() []rune {
 			if g.CurrentTurn != nil {
-				return g.CurrentTurn.Revealed
+				return g.CurrentTurn.RevealedLetters
 			}
 			return []rune{}
 		}(),
@@ -218,11 +175,11 @@ func (g *Game) StartGame() error {
 
 	g.SendMessageToPlayer(firstDrawer.Id, PlayerMessage{
 		PlayerId: firstDrawer.Id,
-		Type:     "open_select_word_modal",
+		Type:     "openSelectWordModal",
 		Payload: struct {
-			SelectableWords []models.JSONWord `json:"selectable_words"`
+			SelectableWords []m.Word `json:"selectableWords"`
 		}{
-			SelectableWords: ConvertWordsToJSON(g.SelectableWords),
+			SelectableWords: g.SelectableWords,
 		},
 	})
 
@@ -551,7 +508,7 @@ func (g *Game) CalculateScore(player *Player) {
 	player.Score += int16(totalScore)
 
 	message := BroadcastMessage{
-		Type: "score_update",
+		Type: "scoreUpdate",
 		Payload: struct {
 			PlayerId string `json:"playerId"`
 			Score    int16  `json:"score"`

@@ -45,11 +45,6 @@ const (
 	maxMessageSize = 20480
 )
 
-var (
-	newline = []byte{'\n'}
-	space   = []byte{' '}
-)
-
 type Message struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
@@ -112,20 +107,20 @@ func (c *Client) readPump() {
 
 		// Handle the parsed message
 		switch parsedMessage.Type {
-		case "start_timer", "stop_timer":
+		case "startTimer", "stopTimer":
 			payloadMap, err := parsePayloadAsMap(parsedMessage.Payload)
 			if err != nil {
 				log.Println(err)
 				break
 			}
 
-			if parsedMessage.Type == "start_timer" {
+			if parsedMessage.Type == "startTimer" {
 				c.hub.gameHandler.HandleTimerStartMessages(payloadMap)
 			} else {
 				c.hub.gameHandler.HandleTimerStopMessages(payloadMap)
 			}
 
-		case "select_word":
+		case "selectWord":
 			payload, ok := parsedMessage.Payload.(map[string]interface{})
 			if !ok {
 				log.Println("Invalid payload: expected an object")
@@ -140,7 +135,7 @@ func (c *Client) readPump() {
 
 			c.hub.gameHandler.HandleWordSelect(word)
 
-		case "player_guess":
+		case "playerGuess":
 			// Define the expected payload structure
 			var playerGuessPayload PlayerGuessPayload
 
@@ -163,8 +158,6 @@ func (c *Client) readPump() {
 			c.hub.gameHandler.HandlePlayerGuess(playerGuessPayload.PlayerId, playerGuessPayload.Username, playerGuessPayload.Guess)
 			continue
 
-		default:
-			break
 		}
 
 		// Broadcast the message to all clients
@@ -246,7 +239,7 @@ func ServeWs(hub *Hub, gameId string, userId string, w http.ResponseWriter, r *h
 	gameState := hub.gameHandler.GetGameState()
 
 	message := BroadcastMessage{
-		Type:    "game_state",
+		Type:    "gameState",
 		Payload: gameState,
 	}
 

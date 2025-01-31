@@ -9,12 +9,12 @@ import (
 
 // Message types for consistency
 const (
-	MessageTypePlayerReconnected = "player-reconnected"
-	MessageTypePlayerJoined      = "player-joined"
-	MessageTypePlayerLeft        = "player-left"
-	MessageTypeYourTurn          = "your-turn"
-	MessageTypeGameUpdate        = "game-update"
-	MessageTypeRoundStarted      = "round-started"
+	MessageTypePlayerReconnected = "playerReconnected"
+	MessageTypePlayerJoined      = "playerJoined"
+	MessageTypePlayerLeft        = "playerLeft"
+	MessageTypeYourTurn          = "yourTurn"
+	MessageTypeGameUpdate        = "gameUpdate"
+	MessageTypeRoundStarted      = "roundStarted"
 )
 
 // BroadcastMessage represents a message sent to all players
@@ -51,10 +51,6 @@ type RoundStartedPayload struct {
 
 type YourTurnPayload struct {
 	Info string `json:"info"`
-}
-
-func logMessageSend(playerId string, messageType string) {
-	log.Printf("Message sent to player %s (Type: %s)", playerId, messageType)
 }
 
 func (g *Game) SendMessageToPlayer(playerId string, message any) error {
@@ -98,9 +94,9 @@ func (g *Game) HandleTimerStartMessages(payload map[string]interface{}) {
 	}
 
 	switch timerTypeVal {
-	case "guess_word_timer":
+	case "guessWordTimer":
 		g.HandleGuessWordCountdown()
-	case "start_game_timer":
+	case "startGameTimer":
 		g.HandleStartGameCountdown()
 	default:
 		log.Printf("Unknown timerType: %s", timerTypeVal)
@@ -115,11 +111,11 @@ func (g *Game) HandleTimerStopMessages(payload map[string]interface{}) {
 	}
 
 	switch timerTypeVal {
-	case "guess_word_timer":
+	case "guessWordTimer":
 		g.CurrentTurn.StopGuessTimer()
-	case "select_word_timer":
+	case "selectWordTimer":
 		g.CurrentTurn.StopSelectWordTimer()
-	case "start_game_timer":
+	case "startGameTimer":
 		g.StopGameTimer()
 
 	default:

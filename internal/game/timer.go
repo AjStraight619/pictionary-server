@@ -122,7 +122,7 @@ func (g *Game) HandleStartGameCountdown() {
 		updatedGameState := g.GetGameState()
 
 		g.BroadcastToAll(BroadcastMessage{
-			Type:    "game_state",
+			Type:    "gameState",
 			Payload: updatedGameState,
 		})
 
@@ -134,10 +134,10 @@ func (g *Game) HandleStartGameCountdown() {
 	go func() {
 		for secondsLeft := range g.StartGameTimer.GetCountdownChannel() {
 			message := TimerMessage{
-				Type: "start_game_timer",
+				Type: "startGameTimer",
 				Payload: TimerPayload{
 					TimeRemaining: secondsLeft,
-					TimerType:     "start_game_timer",
+					TimerType:     "startGameTimer",
 				},
 			}
 

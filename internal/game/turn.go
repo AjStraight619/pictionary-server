@@ -10,7 +10,7 @@ type Turn struct {
 	Drawer          *Player
 	Game            *Game
 	Word            string
-	Revealed        []rune
+	RevealedLetters []rune
 	GuessTimer      *Timer
 	SelectWordTimer *Timer
 }
@@ -18,9 +18,9 @@ type Turn struct {
 // Create a new turn for the given drawer.
 func NewTurn(drawer *Player, game *Game) *Turn {
 	return &Turn{
-		Drawer:   drawer,
-		Game:     game,
-		Revealed: make([]rune, 0),
+		Drawer:          drawer,
+		Game:            game,
+		RevealedLetters: make([]rune, 0),
 	}
 }
 
@@ -42,7 +42,7 @@ func (t *Turn) StartSelectWordTimer(duration time.Duration, onExpire func()) {
 	go func() {
 		for secondsLeft := range t.SelectWordTimer.GetCountdownChannel() {
 			message := BroadcastMessage{
-				Type: "select_word_timer",
+				Type: "selectWordTimer",
 				Payload: struct {
 					TimeRemaining int `json:"timeRemaining"`
 				}{
@@ -78,7 +78,7 @@ func (t *Turn) StartGuessTimer(duration time.Duration, onExpire func()) {
 	go func() {
 		for secondsLeft := range t.GuessTimer.GetCountdownChannel() {
 			message := BroadcastMessage{
-				Type: "guess_word_timer",
+				Type: "guessWordTimer",
 				Payload: struct {
 					TimeRemaining int `json:"timeRemaining"`
 				}{
@@ -110,15 +110,15 @@ func (t *Turn) revealLetters(duration time.Duration) {
 	for i := 0; i < len(t.Word); i++ {
 		select {
 		case <-time.After(revealInterval):
-			t.Revealed = append(t.Revealed, rune(t.Word[i]))
+			t.RevealedLetters = append(t.RevealedLetters, rune(t.Word[i]))
 
 			// Broadcast the revealed letters.
 
-			log.Printf("Revealed letters: %s", string(t.Revealed))
+			log.Printf("Revealed letters: %s", string(t.RevealedLetters))
 			message := BroadcastMessage{
-				Type: "revealed_letter",
+				Type: "revealedLetter",
 				Payload: struct {
-					RevealedLetters string `json:"revealed_letter"`
+					RevealedLetters string `json:"revealedLetter"`
 				}{
 					RevealedLetters: string(t.Word[i]),
 				},

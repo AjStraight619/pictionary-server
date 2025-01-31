@@ -1,9 +1,9 @@
 package models
 
 type Word struct {
-	Id       uint   `gorm:"primaryKey"`
-	Word     string `gorm:"not null"`
-	Category string `gorm:"not null"`
+	Id       uint   `gorm:"primaryKey" json:"id"`
+	Word     string `gorm:"not null" json:"word"`
+	Category string `gorm:"not null" json:"category"`
 }
 
 type JSONWord struct {
