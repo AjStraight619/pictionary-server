@@ -2,13 +2,13 @@ package game
 
 import (
 	"fmt"
+	m "github.com/Ajstraight619/pictionary-server/internal/database/models"
+	ws "github.com/Ajstraight619/pictionary-server/internal/websocket"
 	"log"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	m "github.com/Ajstraight619/pictionary-server/internal/database/models"
-	ws "github.com/Ajstraight619/pictionary-server/internal/websocket"
 )
 
 type GameStatus int
@@ -370,87 +370,6 @@ func (g *Game) RunCountdownTimer(duration time.Duration, messageType string) {
 
 	// Block execution until the timer is over
 	<-done
-}
-
-func (g *Game) HandlePlayerGuess(playerId string, username string, guess string) {
-	if g.CurrentTurn == nil {
-		log.Println("Current turn is nil")
-		return
-	}
-
-	if g.CurrentTurn.allPlayersGuessedCorrect() {
-		currentDrawer := g.Round.getCurrentDrawer()
-		g.CurrentTurn.Game.EndCurrentTurnAndStartNext(currentDrawer)
-
-	}
-
-	if playerId == g.CurrentTurn.Drawer.Id {
-		log.Println("Drawer cannot guess the word")
-		return
-	}
-
-	correctWord := g.CurrentTurn.Word
-	distance := levenshteinDistance(guess, correctWord)
-	threshold := 2
-
-	if g.CurrentTurn.GuessTimer.isRunning {
-
-		if guess == correctWord {
-
-			player := g.GetPlayerById(playerId)
-			g.CalculateScore(player)
-			player.HasGuessedCorrect = true
-
-			if err := g.BroadcastToAll(BroadcastMessage{
-				Type: "player_guess",
-				Payload: struct {
-					PlayerId string `json:"playerId"`
-					Username string `json:"username"`
-					Guess    string `json:"guess"`
-				}{
-					PlayerId: playerId,
-					Username: username,
-					Guess:    username + " guessed the word!",
-				},
-			}); err != nil {
-				log.Printf("Failed to broadcast player guess: %v", err)
-			}
-
-		} else if distance <= threshold {
-			if err := g.BroadcastToAll(BroadcastMessage{
-				Type: "player_guess",
-				Payload: struct {
-					PlayerId string `json:"playerId"`
-					Username string `json:"username"`
-					Guess    string `json:"guess"`
-				}{
-					PlayerId: playerId,
-					Username: username,
-					Guess:    username + " is close!",
-				},
-			}); err != nil {
-				log.Printf("Failed to broadcast player guess: %v", err)
-			}
-
-		} else {
-			// Broadcast the player's guess to all users
-			if err := g.BroadcastToAll(BroadcastMessage{
-				Type: "player_guess",
-				Payload: struct {
-					PlayerId string `json:"playerId"`
-					Username string `json:"username"`
-					Guess    string `json:"guess"`
-				}{
-					PlayerId: playerId,
-					Username: username,
-					Guess:    guess,
-				},
-			}); err != nil {
-				log.Printf("Failed to broadcast player guess: %v", err)
-			}
-		}
-	}
-
 }
 
 func levenshteinDistance(s1, s2 string) int {

@@ -3,6 +3,8 @@ package game
 import (
 	"encoding/json"
 	"log"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +15,8 @@ type Turn struct {
 	RevealedLetters []rune
 	GuessTimer      *Timer
 	SelectWordTimer *Timer
+	correctGuesses  int32
+	endTurnOnce     sync.Once
 }
 
 // Create a new turn for the given drawer.
@@ -137,32 +141,27 @@ func (t *Turn) revealLetters(duration time.Duration) {
 	}
 }
 
-func (g *Game) EndCurrentTurnAndStartNext(player *Player) {
+func (g *Game) EndCurrentTurnAndStartNext(currentDrawer *Player) {
+	// Mark that the current drawer has finished their turn.
+	currentDrawer.HasDrawn = true
 
-	player.HasDrawn = true
-
-	// Advance to next drawer
-	nextDrawer, err := g.Round.NextDrawer()
-	if err != nil {
-		// Possibly the game ended
-		log.Printf("Game might be over or error: %v", err)
-		return
-	}
-
-	// Reset guess flags
+	// Reset the guessed flag for all players for the next turn.
 	for _, p := range g.Players {
 		p.HasGuessedCorrect = false
 	}
 
-	// Create new Turn
+	// Get the next drawer via your Round logic.
+	nextDrawer, err := g.Round.NextDrawer()
+	if err != nil {
+		log.Printf("Turn transition error or game over: %v", err)
+		return
+	}
+
+	// Create a new turn for the next drawer.
 	g.CurrentTurn = NewTurn(nextDrawer, g)
 
-	// Possibly broadcast word choices or just
-	// automatically select a word, etc.
-	// Then start the turn timers, e.g.:
-	g.CurrentTurn.StartSelectWordTimer(time.Duration(g.Options.SelectWordTimer), func() {
-		log.Printf("Select word timer expired for drawer %s", g.CurrentTurn.Drawer.Username)
-
+	g.CurrentTurn.StartSelectWordTimer(time.Second*time.Duration(g.Options.SelectWordTimer), func() {
+		log.Printf("Select word timer expired for drawer %s", nextDrawer.Username)
 	})
 }
 
@@ -189,5 +188,124 @@ func (t *Turn) StopGuessTimer() {
 		t.GuessTimer.Stop()
 		t.GuessTimer = nil
 		log.Printf("Guess timer stopped for drawer %s", t.Drawer.Username)
+	}
+}
+
+func (g *Game) HandlePlayerGuess(playerId string, username string, guess string) {
+	// Use a local copy of the current turn.
+	turn := g.CurrentTurn
+	if turn == nil {
+		log.Println("No current turn, ignoring guess")
+		return
+	}
+
+	// If the guess timer hasn’t been started or is nil, ignore guesses.
+	if turn.GuessTimer == nil || !turn.GuessTimer.isRunning {
+		log.Println("Guess timer not active, ignoring guess")
+		return
+	}
+
+	// The drawer should not be allowed to guess.
+	if playerId == turn.Drawer.Id {
+		log.Println("Drawer cannot guess the word")
+		return
+	}
+
+	correctWord := turn.Word
+	distance := levenshteinDistance(guess, correctWord)
+	threshold := 2
+
+	if turn.GuessTimer.isRunning {
+		if guess == correctWord {
+			player := g.GetPlayerById(playerId)
+			if player == nil {
+				log.Printf("Player with ID %s not found", playerId)
+				return
+			}
+			g.CalculateScore(player)
+			player.HasGuessedCorrect = true
+
+			// Atomically increment the correct guess count.
+			newCount := atomic.AddInt32(&turn.correctGuesses, 1)
+			required := int32(len(g.Players) - 1) // all non-drawers
+
+			if newCount >= required {
+				// Ensure the transition logic runs only once.
+				turn.endTurnOnce.Do(func() {
+					currentDrawer := g.Round.getCurrentDrawer()
+					g.EndCurrentTurnAndStartNext(currentDrawer)
+				})
+			}
+
+			// Broadcast a successful guess message.
+			message := BroadcastMessage{
+				Type: "player_guess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    username + " guessed the word!",
+				},
+			}
+			if err := g.BroadcastToAll(message); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+			return
+		} else if distance <= threshold {
+			// Broadcast a "close" message.
+			message := BroadcastMessage{
+				Type: "player_guess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    username + " is close!",
+				},
+			}
+			if err := g.BroadcastToAll(message); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+		} else {
+			// Broadcast the guess as is.
+			message := BroadcastMessage{
+				Type: "playerGuess",
+				Payload: struct {
+					PlayerId string `json:"playerId"`
+					Username string `json:"username"`
+					Guess    string `json:"guess"`
+				}{
+					PlayerId: playerId,
+					Username: username,
+					Guess:    guess,
+				},
+			}
+			if err := g.BroadcastToAll(message); err != nil {
+				log.Printf("Failed to broadcast player guess: %v", err)
+			}
+		}
+	}
+}
+
+func (g *Game) broadcastGuess(playerId, username, messageText string) {
+	msg := BroadcastMessage{
+		Type: "player_guess",
+		Payload: struct {
+			PlayerId string `json:"playerId"`
+			Username string `json:"username"`
+			Guess    string `json:"guess"`
+		}{
+			PlayerId: playerId,
+			Username: username,
+			Guess:    messageText,
+		},
+	}
+	if err := g.BroadcastToAll(msg); err != nil {
+		log.Printf("Failed to broadcast guess: %v", err)
 	}
 }
